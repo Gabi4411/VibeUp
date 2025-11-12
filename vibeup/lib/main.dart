@@ -2,6 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'services/auth_service.dart';
+import 'services/event_service.dart';
+import 'services/ticket_service.dart';
+import 'models/event_model.dart';
+import 'models/ticket_model.dart';
+import 'screens/create_event_screen.dart';
+import 'screens/event_details_screen.dart';
+import 'screens/event_analytics_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/chat_room_screen.dart';
+import 'widgets/purchase_ticket_dialog.dart';
 
 // Firebase Options Import
 import 'firebase_options.dart';
@@ -71,20 +81,19 @@ class VibeUpApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.dark(
-          primary: const Color(0xFF00FF88), // Bright green accent
-          secondary: const Color(0xFF00FF88),
-          surface: const Color(0xFF1A1F2E), // Dark blue-grey background
-          onPrimary: Colors.black,
-          onSecondary: Colors.black,
-          onSurface: Colors.white,
-        ),
+        brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF131722),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF00FF88),
+          secondary: Color(0xFF00FF88),
+          surface: Color(0xFF1A1F2E),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Color(0xFF1A1F2E),
+          foregroundColor: Colors.white,
           elevation: 0,
-          centerTitle: false,
         ),
+        cardColor: const Color(0xFF1A1F2E),
       ),
       home: const AuthWrapper(),
     );
@@ -641,7 +650,16 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  String _selectedFilter = 'Nearby';
+  String? _selectedCategory; // null means "All"
+  final EventService _eventService = EventService();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -662,25 +680,120 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     const SizedBox(height: 16),
                     _buildCategoryFilters(),
                     const SizedBox(height: 24),
-                    _buildSectionTitle('Popular near you'),
-                    const SizedBox(height: 16),
-                    _buildEventCard(
-                      date: 'NOV',
-                      day: '12',
-                      title: 'Sunset Sounds Festival',
-                      location: 'Marina Green',
-                      time: '5:00 PM',
-                      tags: ['Outdoor', 'Live Music', '21+'],
-                      attendance: 126,
+                    _buildSectionTitle(
+                      _searchQuery.isNotEmpty
+                          ? 'Search Results'
+                          : (_selectedCategory == null
+                                ? 'All Events'
+                                : '$_selectedCategory Events'),
                     ),
-                    _buildEventCard(
-                      date: 'NOV',
-                      day: '18',
-                      title: 'Tech Connect Summit',
-                      location: 'City Expo Hall',
-                      time: '9:00 AM',
-                      tags: ['Conference', 'Networking'],
-                      attendance: 58,
+                    const SizedBox(height: 16),
+                    // Stream builder to display events from Firebase
+                    StreamBuilder<List<Event>>(
+                      stream: _selectedCategory == null
+                          ? _eventService.getPublicEvents()
+                          : _eventService.getEventsByCategory(
+                              _selectedCategory!,
+                            ),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFF00FF88),
+                            ),
+                          );
+                        }
+
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: Colors.red,
+                                    size: 48,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Error loading events',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    snapshot.error.toString(),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        final allEvents = snapshot.data ?? [];
+
+                        // Filter events by search query
+                        final events = _searchQuery.isEmpty
+                            ? allEvents
+                            : allEvents
+                                  .where(
+                                    (event) => event.name
+                                        .toLowerCase()
+                                        .contains(_searchQuery),
+                                  )
+                                  .toList();
+
+                        if (events.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(32.0),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.event_busy,
+                                    size: 64,
+                                    color: Colors.white.withValues(alpha: 0.3),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _searchQuery.isEmpty
+                                        ? 'No events available yet'
+                                        : 'No events found matching "$_searchQuery"',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Column(
+                          children: events
+                              .map((event) => _buildEventCard(context, event))
+                              .toList(),
+                        );
+                      },
                     ),
                     const SizedBox(height: 8), // Bottom padding for scroll
                   ],
@@ -713,84 +826,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-            onPressed: () {},
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-          ),
-          IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.white),
             onPressed: () {
-              // Show logout option
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  backgroundColor: const Color(0xFF1A1F2E),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  title: const Text(
-                    'Profile',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Email: ${authService.userEmail ?? 'N/A'}',
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Role: ${authService.userRole?.toUpperCase() ?? 'N/A'}',
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'Close',
-                        style: TextStyle(color: Colors.white70),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        final navigator = Navigator.of(context);
-                        final messenger = ScaffoldMessenger.of(context);
-                        try {
-                          await authService.signOut();
-                          if (mounted) {
-                            navigator.pop();
-                          }
-                        } catch (e) {
-                          if (mounted) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Error signing out: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text(
-                        'Logout',
-                        style: TextStyle(color: Color(0xFF00FF88)),
-                      ),
-                    ),
-                  ],
+              // Navigate to settings screen
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      SettingsScreen(authService: authService),
                 ),
               );
             },
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-          ),
-          IconButton(
-            icon: const Icon(Icons.tune, color: Colors.white),
-            onPressed: () {},
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
           ),
@@ -800,78 +846,110 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Widget _buildSearchBar() {
-    return GestureDetector(
-      onTap: () {
-        // TODO: Navigate to search screen or show search dialog
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1F2E),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Row(
-          children: [
-            Icon(Icons.search, color: Colors.white70, size: 20),
-            SizedBox(width: 12),
-            Text(
-              'Search events, artists, venues',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F2E),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.search, color: Colors.white70, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: 'Search events by name',
+                hintStyle: TextStyle(color: Colors.white70, fontSize: 14),
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 14.0),
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value.toLowerCase();
+                });
+              },
             ),
-          ],
-        ),
+          ),
+          if (_searchQuery.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear, color: Colors.white70, size: 20),
+              onPressed: () {
+                setState(() {
+                  _searchController.clear();
+                  _searchQuery = '';
+                });
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+        ],
       ),
     );
   }
 
   Widget _buildCategoryFilters() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Category filters - horizontally scrollable
-        SizedBox(
-          height: 44, // Fixed height for consistent layout
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _buildFilterChip('Trending', Icons.star, false),
-              const SizedBox(width: 8),
-              _buildFilterChip('Music', Icons.music_note, false),
-              const SizedBox(width: 8),
-              _buildFilterChip('Nightlife', Icons.grid_view, false),
-              const SizedBox(width: 8),
-              _buildFilterChip('Arts', Icons.palette, false),
-              const SizedBox(width: 8),
-              _buildFilterChip('Sports', Icons.sports_soccer, false),
-              const SizedBox(width: 8),
-              _buildFilterChip('Food', Icons.restaurant, false),
-            ],
+    // Category filters - horizontally scrollable
+    return SizedBox(
+      height: 44, // Fixed height for consistent layout
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _buildFilterChip('All', Icons.apps, _selectedCategory == null),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Music',
+            Icons.music_note,
+            _selectedCategory == 'Music',
           ),
-        ),
-        const SizedBox(height: 12),
-        // Filter options - horizontally scrollable
-        SizedBox(
-          height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _buildFilterChip('Nearby', null, _selectedFilter == 'Nearby'),
-              const SizedBox(width: 8),
-              _buildFilterChip(
-                'This Week',
-                null,
-                _selectedFilter == 'This Week',
-              ),
-              const SizedBox(width: 8),
-              _buildFilterChip('Saved', null, _selectedFilter == 'Saved'),
-              const SizedBox(width: 8),
-              _buildFilterChip('Today', null, _selectedFilter == 'Today'),
-              const SizedBox(width: 8),
-              _buildFilterChip('Free', null, _selectedFilter == 'Free'),
-            ],
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Nightlife',
+            Icons.nightlife,
+            _selectedCategory == 'Nightlife',
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          _buildFilterChip('Arts', Icons.palette, _selectedCategory == 'Arts'),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Sports',
+            Icons.sports_soccer,
+            _selectedCategory == 'Sports',
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Food',
+            Icons.restaurant,
+            _selectedCategory == 'Food',
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Conference',
+            Icons.business,
+            _selectedCategory == 'Conference',
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Workshop',
+            Icons.school,
+            _selectedCategory == 'Workshop',
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Festival',
+            Icons.celebration,
+            _selectedCategory == 'Festival',
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            'Other',
+            Icons.category,
+            _selectedCategory == 'Other',
+          ),
+        ],
+      ),
     );
   }
 
@@ -879,7 +957,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     return InkWell(
       onTap: () {
         setState(() {
-          _selectedFilter = label;
+          // If "All" is selected, set category to null
+          _selectedCategory = label == 'All' ? null : label;
         });
       },
       borderRadius: BorderRadius.circular(20),
@@ -893,13 +972,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 16, color: Colors.white),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? Colors.black : Colors.white,
+              ),
               const SizedBox(width: 6),
             ],
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: isSelected ? Colors.black : Colors.white,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
               ),
@@ -921,15 +1004,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _buildEventCard({
-    required String date,
-    required String day,
-    required String title,
-    required String location,
-    required String time,
-    required List<String> tags,
-    required int attendance,
-  }) {
+  Widget _buildEventCard(BuildContext context, Event event) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16.0),
@@ -959,7 +1034,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      date,
+                      event.formattedDate,
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
@@ -968,7 +1043,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      day,
+                      event.formattedDay,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
@@ -985,7 +1060,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
+                      event.name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 17,
@@ -1005,7 +1080,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            location,
+                            event.location,
                             style: const TextStyle(
                               color: Colors.white70,
                               fontSize: 13,
@@ -1026,7 +1101,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          time,
+                          event.time,
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 13,
@@ -1044,7 +1119,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: tags.map((tag) {
+            children: event.tags.map((tag) {
               return Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10.0,
@@ -1069,7 +1144,19 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 child: SizedBox(
                   height: 44, // Minimum touch target
                   child: OutlinedButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      // Navigate to event details screen
+                      final authService = _InheritedAuthProvider.of(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EventDetailsScreen(
+                            event: event,
+                            userId: authService.user?.uid ?? '',
+                          ),
+                        ),
+                      );
+                    },
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.white24),
                       shape: RoundedRectangleBorder(
@@ -1088,7 +1175,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 child: SizedBox(
                   height: 44, // Minimum touch target
                   child: ElevatedButton(
-                    onPressed: () {},
+                    onPressed: () async {
+                      // Show purchase ticket dialog
+                      final authService = _InheritedAuthProvider.of(context);
+                      await showPurchaseTicketDialog(
+                        context,
+                        event,
+                        authService.user?.uid ?? '',
+                      );
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF00FF88),
                       foregroundColor: Colors.black,
@@ -1114,7 +1209,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               const Icon(Icons.people_outline, size: 14, color: Colors.white70),
               const SizedBox(width: 4),
               Text(
-                '$attendance going',
+                '${event.attendanceCount} going',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
@@ -1126,75 +1221,655 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 }
 
 // Placeholder screens for other navigation tabs
-class TicketsScreen extends StatelessWidget {
+class TicketsScreen extends StatefulWidget {
   const TicketsScreen({super.key});
 
   @override
+  State<TicketsScreen> createState() => _TicketsScreenState();
+}
+
+class _TicketsScreenState extends State<TicketsScreen> {
+  final TicketService _ticketService = TicketService();
+
+  @override
   Widget build(BuildContext context) {
+    final authService = _InheritedAuthProvider.of(context);
+
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.confirmation_number,
-              size: 64,
-              color: Colors.white.withValues(alpha: 0.5),
+      appBar: AppBar(
+        title: const Text('My Tickets', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF1A1F2E),
+      ),
+      body: SafeArea(
+        child: StreamBuilder<List<Ticket>>(
+          stream: _ticketService.getUserTickets(authService.user?.uid ?? ''),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF00FF88)),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.error_outline,
+                        color: Colors.red,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Error loading tickets',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        snapshot.error.toString(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final tickets = snapshot.data ?? [];
+
+            if (tickets.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.confirmation_number_outlined,
+                        size: 80,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'No tickets yet',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Purchase tickets to see them here',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: tickets.length,
+              itemBuilder: (context, index) {
+                return _buildTicketCard(tickets[index]);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTicketCard(Ticket ticket) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1F2E),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          // Main ticket content
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Date block
+                Container(
+                  width: 60,
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FF88),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        ticket.formattedDate,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        ticket.formattedDay,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Event details
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ticket.eventName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 14,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              ticket.eventLocation,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 14,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            ticket.eventTime,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(
+                                0xFF00FF88,
+                              ).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: const Color(0xFF00FF88),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  ticket.ticketType == 'VIP'
+                                      ? Icons.star
+                                      : Icons.confirmation_number,
+                                  size: 14,
+                                  color: const Color(0xFF00FF88),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  ticket.ticketType,
+                                  style: const TextStyle(
+                                    color: Color(0xFF00FF88),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            ticket.price > 0
+                                ? '\$${ticket.price.toStringAsFixed(2)}'
+                                : 'Free',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'Tickets',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 24,
+          ),
+          // Divider
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.transparent,
+                  Colors.white.withValues(alpha: 0.2),
+                  Colors.transparent,
+                ],
               ),
             ),
-          ],
+          ),
+          // Delete button
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  _showDeleteConfirmation(ticket);
+                },
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Cancel Attendance'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(Ticket ticket) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1F2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Cancel Attendance',
+          style: TextStyle(color: Colors.white),
         ),
+        content: Text(
+          'Are you sure you want to cancel your attendance for "${ticket.eventName}"?',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Keep Ticket',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              final navigator = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await _ticketService.deleteTicket(ticket.id, ticket.eventId);
+                if (mounted) {
+                  navigator.pop();
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Text('Ticket cancelled successfully'),
+                      backgroundColor: Color(0xFF00FF88),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  navigator.pop();
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text('Error: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text(
+              'Cancel Ticket',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class ChatScreen extends StatelessWidget {
+class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
   @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TicketService _ticketService = TicketService();
+  final EventService _eventService = EventService();
+
+  @override
   Widget build(BuildContext context) {
+    final authService = _InheritedAuthProvider.of(context);
+
     return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.chat_bubble_outline,
-              size: 64,
-              color: Colors.white.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Chat',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 24,
-              ),
-            ),
-          ],
+      appBar: AppBar(
+        title: const Text('Event Chats', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF1A1F2E),
+      ),
+      body: SafeArea(
+        child: StreamBuilder<List<Ticket>>(
+          stream: _ticketService.getUserTickets(authService.user?.uid ?? ''),
+          builder: (context, ticketSnapshot) {
+            if (ticketSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF00FF88)),
+              );
+            }
+
+            if (ticketSnapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.red,
+                      size: 48,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading your events',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final tickets = ticketSnapshot.data ?? [];
+
+            if (tickets.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 80,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'No event chats yet',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Purchase tickets to events to join their chat rooms',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            // Get unique event IDs from tickets
+            final eventIds = tickets.map((t) => t.eventId).toSet().toList();
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: eventIds.length,
+              itemBuilder: (context, index) {
+                return _buildEventChatCard(
+                  context,
+                  eventIds[index],
+                  authService,
+                );
+              },
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildEventChatCard(
+    BuildContext context,
+    String eventId,
+    AuthService authService,
+  ) {
+    return FutureBuilder<Event?>(
+      future: _eventService.getEventById(eventId),
+      builder: (context, eventSnapshot) {
+        if (eventSnapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            height: 80,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1F2E),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF00FF88),
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        }
+
+        if (!eventSnapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final event = eventSnapshot.data!;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1F2E),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatRoomScreen(
+                      event: event,
+                      userId: authService.user?.uid ?? '',
+                      userName: authService.userEmail?.split('@')[0] ?? 'User',
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Event icon/avatar
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00FF88).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.event,
+                        color: Color(0xFF00FF88),
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Event info
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.people,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${event.attendanceCount} members',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${event.formattedDate} ${event.formattedDay}',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Arrow icon
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white54,
+                      size: 24,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
 // Developer Screen with developer dashboard content
-class DeveloperScreen extends StatelessWidget {
+class DeveloperScreen extends StatefulWidget {
   final bool isDeveloper;
 
   const DeveloperScreen({super.key, required this.isDeveloper});
 
   @override
+  State<DeveloperScreen> createState() => _DeveloperScreenState();
+}
+
+class _DeveloperScreenState extends State<DeveloperScreen> {
+  final EventService _eventService = EventService();
+
+  @override
   Widget build(BuildContext context) {
-    if (!isDeveloper) {
+    if (!widget.isDeveloper) {
       return Scaffold(
         body: Center(
           child: Column(
@@ -1229,6 +1904,8 @@ class DeveloperScreen extends StatelessWidget {
       );
     }
 
+    final authService = _InheritedAuthProvider.of(context);
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -1238,11 +1915,109 @@ class DeveloperScreen extends StatelessWidget {
             children: [
               _buildSectionTitle('Developer Dashboard'),
               const SizedBox(height: 16),
-              _buildOrganizerActions(),
+              _buildOrganizerActions(context, authService),
+              const SizedBox(height: 24),
+              _buildSectionTitle('My Events'),
               const SizedBox(height: 16),
-              _buildOrganizerEventCard(),
-              const SizedBox(height: 16),
-              _buildEventDetails(),
+              // Stream builder to display developer's events
+              StreamBuilder<List<Event>>(
+                stream: _eventService.getDeveloperEvents(
+                  authService.user?.uid ?? '',
+                ),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF00FF88),
+                      ),
+                    );
+                  }
+
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: Colors.red,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Error loading events',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              snapshot.error.toString(),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  final events = snapshot.data ?? [];
+
+                  if (events.isEmpty) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32.0),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.event_note,
+                              size: 64,
+                              color: Colors.white.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No events created yet',
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Tap "New Event" to create your first event',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.3),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: events
+                        .map(
+                          (event) => _buildDeveloperEventCard(
+                            context,
+                            event,
+                            authService,
+                          ),
+                        )
+                        .toList(),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -1261,31 +2036,155 @@ class DeveloperScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOrganizerActions() {
+  Widget _buildOrganizerActions(BuildContext context, AuthService authService) {
     return Row(
       children: [
         Expanded(
           child: _buildActionButton(
-            icon: Icons.calendar_today,
+            context: context,
+            icon: Icons.add_circle_outline,
             label: 'New Event',
+            onTap: () async {
+              // Navigate to create event screen
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CreateEventScreen(
+                    userId: authService.user?.uid ?? '',
+                    userName: authService.userEmail ?? 'Developer',
+                  ),
+                ),
+              );
+
+              // Refresh the list if event was created
+              if (result == true && mounted) {
+                setState(() {});
+              }
+            },
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: _buildActionButton(
-            icon: Icons.confirmation_number,
-            label: 'Tickets',
+            context: context,
+            icon: Icons.analytics_outlined,
+            label: 'Analytics',
+            onTap: () {
+              _showAnalyticsEventSelector(context, authService);
+            },
           ),
         ),
       ],
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required String label}) {
+  void _showAnalyticsEventSelector(
+    BuildContext context,
+    AuthService authService,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1F2E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Select Event for Analytics',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: StreamBuilder<List<Event>>(
+          stream: _eventService.getDeveloperEvents(authService.user?.uid ?? ''),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 100,
+                child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFF00FF88)),
+                ),
+              );
+            }
+
+            final events = snapshot.data ?? [];
+
+            if (events.isEmpty) {
+              return const Text(
+                'No events available. Create an event first.',
+                style: TextStyle(color: Colors.white70),
+              );
+            }
+
+            return SizedBox(
+              width: double.maxFinite,
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: events.length,
+                itemBuilder: (context, index) {
+                  final event = events[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00FF88).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.event,
+                        color: Color(0xFF00FF88),
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      event.name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    subtitle: Text(
+                      '${event.attendanceCount} attending',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              EventAnalyticsScreen(event: event),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required BuildContext context,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
     return InkWell(
-      onTap: () {
-        // TODO: Navigate to respective screens
-      },
+      onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16.0),
@@ -1296,7 +2195,7 @@ class DeveloperScreen extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: Colors.white, size: 20),
+            Icon(icon, color: const Color(0xFF00FF88), size: 20),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -1316,8 +2215,13 @@ class DeveloperScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOrganizerEventCard() {
+  Widget _buildDeveloperEventCard(
+    BuildContext context,
+    Event event,
+    AuthService authService,
+  ) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
         color: const Color(0xFF1A1F2E),
@@ -1326,54 +2230,127 @@ class DeveloperScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Sunset Sounds Festival',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+          // Header with event name and status
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  event.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: event.isPublic
+                      ? const Color(0xFF00FF88).withValues(alpha: 0.2)
+                      : Colors.orange.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: event.isPublic
+                        ? const Color(0xFF00FF88)
+                        : Colors.orange,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  event.isPublic ? 'Public' : 'Private',
+                  style: TextStyle(
+                    color: event.isPublic
+                        ? const Color(0xFF00FF88)
+                        : Colors.orange,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
-          const Row(
+
+          // Location, date and time
+          Row(
             children: [
-              Icon(Icons.location_on, size: 14, color: Colors.white70),
-              SizedBox(width: 4),
+              const Icon(Icons.location_on, size: 14, color: Colors.white70),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  event.location,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 14, color: Colors.white70),
+              const SizedBox(width: 4),
               Text(
-                'Marina Green • Nov 12 • 5:00 PM',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                '${event.formattedDate} ${event.formattedDay} • ${event.time}',
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF00FF88),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'Attending',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+
+          // Stats
+          Row(
+            children: [
+              const Icon(Icons.people_outline, size: 16, color: Colors.white70),
+              const SizedBox(width: 4),
+              Text(
+                '${event.attendanceCount} attending',
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '124 participants',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
+              const SizedBox(width: 16),
+              const Icon(Icons.category, size: 16, color: Colors.white70),
+              const SizedBox(width: 4),
+              Text(
+                event.category,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
+
+          // Action buttons
           Row(
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                  label: const Text('Open Chat'),
+                  onPressed: () async {
+                    // Navigate to edit event screen
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => CreateEventScreen(
+                          userId: authService.user?.uid ?? '',
+                          userName: authService.userEmail ?? 'Developer',
+                          existingEvent: event,
+                        ),
+                      ),
+                    );
+
+                    // Refresh the list if event was updated
+                    if (result == true && mounted) {
+                      setState(() {});
+                    }
+                  },
+                  icon: const Icon(Icons.edit, size: 18),
+                  label: const Text('Edit'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     side: const BorderSide(color: Colors.white24),
@@ -1385,14 +2362,103 @@ class DeveloperScreen extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.confirmation_number, size: 18),
-                  label: const Text('Show Ticket'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00FF88),
-                    foregroundColor: Colors.black,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    // Navigate to analytics screen
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            EventAnalyticsScreen(event: event),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  label: const Text('Analytics'),
+                  style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Color(0xFF00FF88)),
+                    foregroundColor: Color(0xFF00FF88),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    // Show delete confirmation
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        backgroundColor: const Color(0xFF1A1F2E),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        title: const Text(
+                          'Delete Event',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        content: Text(
+                          'Are you sure you want to delete "${event.name}"? This action cannot be undone.',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () async {
+                              try {
+                                await _eventService.deleteEvent(event.id);
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Event deleted successfully',
+                                      ),
+                                      backgroundColor: Color(0xFF00FF88),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  Navigator.pop(context);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error: $e'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                            child: const Text(
+                              'Delete',
+                              style: TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Delete'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    side: const BorderSide(color: Colors.red),
+                    foregroundColor: Colors.red,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -1403,46 +2469,6 @@ class DeveloperScreen extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildEventDetails() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Event details',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Row(
-          children: [
-            Icon(Icons.music_note, size: 18, color: Colors.white70),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Live DJs, food trucks, waterfront views.',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const Row(
-          children: [
-            Icon(Icons.local_offer, size: 18, color: Colors.white70),
-            SizedBox(width: 8),
-            Text(
-              'GA \$35 • VIP \$79',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
