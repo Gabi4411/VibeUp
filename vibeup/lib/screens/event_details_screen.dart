@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/event_model.dart';
 import '../widgets/purchase_ticket_dialog.dart';
+import '../services/auth_service.dart';
 
 class EventDetailsScreen extends StatelessWidget {
   final Event event;
   final String userId;
+  final AuthService authService;
 
   const EventDetailsScreen({
     super.key,
     required this.event,
     required this.userId,
+    required this.authService,
   });
 
   @override
@@ -334,7 +337,12 @@ class EventDetailsScreen extends StatelessWidget {
             height: 50,
             child: ElevatedButton(
               onPressed: () async {
-                await showPurchaseTicketDialog(context, event, userId);
+                await showPurchaseTicketDialog(
+                  context,
+                  event,
+                  userId,
+                  authService,
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF00FF88),

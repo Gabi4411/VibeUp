@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 class AuthService extends ChangeNotifier {
   FirebaseAuth? _auth;
   FirebaseFirestore? _firestore;
-  
+
   // Check if Firebase is initialized
   bool get _isFirebaseInitialized {
     try {
@@ -19,6 +19,7 @@ class AuthService extends ChangeNotifier {
   User? _user;
   String? _userRole;
   String? _userEmail;
+  double _balance = 0.0;
 
   User? get user => _user;
   bool get isAuthenticated => _user != null;
@@ -26,6 +27,7 @@ class AuthService extends ChangeNotifier {
   String? get userEmail => _userEmail;
   bool get isDeveloper => _userRole == 'developer';
   bool get isUser => _userRole == 'user';
+  double get balance => _balance;
 
   AuthService() {
     // Only set up Firebase listeners if Firebase is initialized
@@ -33,7 +35,7 @@ class AuthService extends ChangeNotifier {
       try {
         _auth = FirebaseAuth.instance;
         _firestore = FirebaseFirestore.instance;
-        
+
         // Listen to authentication state changes
         _auth!.authStateChanges().listen((User? user) async {
           _user = user;
@@ -43,6 +45,7 @@ class AuthService extends ChangeNotifier {
           } else {
             _userRole = null;
             _userEmail = null;
+            _balance = 0.0;
           }
           notifyListeners();
         });
@@ -55,18 +58,20 @@ class AuthService extends ChangeNotifier {
       _user = null;
       _userRole = null;
       _userEmail = null;
+      _balance = 0.0;
     }
   }
 
   // Load user data from Firestore
   Future<void> _loadUserData(String uid) async {
     if (!_isFirebaseInitialized || _firestore == null) return;
-    
+
     try {
       final docSnapshot = await _firestore!.collection('users').doc(uid).get();
       if (docSnapshot.exists) {
         final data = docSnapshot.data();
         _userRole = data?['role'] as String?;
+        _balance = (data?['balance'] as num?)?.toDouble() ?? 0.0;
       }
       notifyListeners();
     } catch (e) {
@@ -82,16 +87,15 @@ class AuthService extends ChangeNotifier {
     required String role, // 'user' or 'developer'
   }) async {
     if (!_isFirebaseInitialized || _auth == null || _firestore == null) {
-      throw Exception('Firebase is not configured. Please set up Firebase first.');
+      throw Exception(
+        'Firebase is not configured. Please set up Firebase first.',
+      );
     }
-    
+
     try {
       // Create user with email and password
-      final UserCredential userCredential =
-          await _auth!.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final UserCredential userCredential = await _auth!
+          .createUserWithEmailAndPassword(email: email, password: password);
 
       final User? user = userCredential.user;
       if (user != null) {
@@ -105,6 +109,7 @@ class AuthService extends ChangeNotifier {
           'email': email,
           'name': name,
           'role': role,
+          'balance': 0.0,
           'createdAt': FieldValue.serverTimestamp(),
         });
 
@@ -119,19 +124,15 @@ class AuthService extends ChangeNotifier {
   }
 
   // Sign in with email and password
-  Future<void> signIn({
-    required String email,
-    required String password,
-  }) async {
+  Future<void> signIn({required String email, required String password}) async {
     if (!_isFirebaseInitialized || _auth == null) {
-      throw Exception('Firebase is not configured. Please set up Firebase first.');
-    }
-    
-    try {
-      await _auth!.signInWithEmailAndPassword(
-        email: email,
-        password: password,
+      throw Exception(
+        'Firebase is not configured. Please set up Firebase first.',
       );
+    }
+
+    try {
+      await _auth!.signInWithEmailAndPassword(email: email, password: password);
       // User data will be loaded automatically by authStateChanges listener
     } on FirebaseAuthException catch (e) {
       throw _handleAuthException(e);
@@ -146,15 +147,17 @@ class AuthService extends ChangeNotifier {
       _user = null;
       _userRole = null;
       _userEmail = null;
+      _balance = 0.0;
       notifyListeners();
       return;
     }
-    
+
     try {
       await _auth!.signOut();
       _user = null;
       _userRole = null;
       _userEmail = null;
+      _balance = 0.0;
       notifyListeners();
     } catch (e) {
       throw Exception('Sign out failed: ${e.toString()}');
@@ -187,11 +190,14 @@ class AuthService extends ChangeNotifier {
 
   // Get current user data
   Future<Map<String, dynamic>?> getCurrentUserData() async {
-    if (_user == null || !_isFirebaseInitialized || _firestore == null) return null;
+    if (_user == null || !_isFirebaseInitialized || _firestore == null)
+      return null;
 
     try {
-      final docSnapshot =
-          await _firestore!.collection('users').doc(_user!.uid).get();
+      final docSnapshot = await _firestore!
+          .collection('users')
+          .doc(_user!.uid)
+          .get();
       if (docSnapshot.exists) {
         return docSnapshot.data();
       }
@@ -199,6 +205,48 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error getting user data: $e');
       return null;
+    }
+  }
+
+  // Add money to user balance
+  Future<void> addMoney(double amount) async {
+    if (_user == null || !_isFirebaseInitialized || _firestore == null) {
+      throw Exception('User not authenticated');
+    }
+
+    try {
+      final newBalance = _balance + amount;
+      await _firestore!.collection('users').doc(_user!.uid).update({
+        'balance': newBalance,
+      });
+      _balance = newBalance;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error adding money: $e');
+      throw Exception('Failed to add money: ${e.toString()}');
+    }
+  }
+
+  // Deduct money from user balance
+  Future<void> deductMoney(double amount) async {
+    if (_user == null || !_isFirebaseInitialized || _firestore == null) {
+      throw Exception('User not authenticated');
+    }
+
+    if (_balance < amount) {
+      throw Exception('Insufficient balance');
+    }
+
+    try {
+      final newBalance = _balance - amount;
+      await _firestore!.collection('users').doc(_user!.uid).update({
+        'balance': newBalance,
+      });
+      _balance = newBalance;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error deducting money: $e');
+      throw Exception('Failed to deduct money: ${e.toString()}');
     }
   }
 }

@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import '../models/event_model.dart';
 import '../services/ticket_service.dart';
+import '../services/auth_service.dart';
 
 class PurchaseTicketDialog extends StatefulWidget {
   final Event event;
   final String userId;
+  final AuthService authService;
 
   const PurchaseTicketDialog({
     super.key,
     required this.event,
     required this.userId,
+    required this.authService,
   });
 
   @override
@@ -58,11 +61,34 @@ class _PurchaseTicketDialogState extends State<PurchaseTicketDialog> {
   }
 
   Future<void> _purchaseTicket() async {
+    // Check if user has enough balance (only if not a free event)
+    final isFree =
+        widget.event.ticketPrice == null && widget.event.ticketPriceVIP == null;
+
+    if (!isFree && widget.authService.balance < _selectedPrice) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Insufficient balance. You need \$${_selectedPrice.toStringAsFixed(2)} but have \$${widget.authService.balance.toStringAsFixed(2)}',
+          ),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Deduct balance if not free
+      if (!isFree) {
+        await widget.authService.deductMoney(_selectedPrice);
+      }
+
+      // Purchase the ticket
       await _ticketService.purchaseTicket(
         event: widget.event,
         userId: widget.userId,
@@ -73,9 +99,14 @@ class _PurchaseTicketDialogState extends State<PurchaseTicketDialog> {
       if (mounted) {
         Navigator.pop(context, true); // Return true to indicate success
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Ticket purchased successfully!'),
-            backgroundColor: Color(0xFF00FF88),
+          SnackBar(
+            content: Text(
+              isFree
+                  ? 'Ticket obtained successfully!'
+                  : 'Ticket purchased successfully! \$${_selectedPrice.toStringAsFixed(2)} deducted from your balance.',
+            ),
+            backgroundColor: const Color(0xFF00FF88),
+            duration: const Duration(seconds: 3),
           ),
         );
       }
@@ -245,6 +276,46 @@ class _PurchaseTicketDialogState extends State<PurchaseTicketDialog> {
                         constraints: const BoxConstraints(),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // User Balance Display
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF131722),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(
+                              Icons.account_balance_wallet,
+                              color: Color(0xFF00FF88),
+                              size: 20,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'Your Balance',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          '\$${widget.authService.balance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            color: Color(0xFF00FF88),
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
 
@@ -507,9 +578,14 @@ Future<bool?> showPurchaseTicketDialog(
   BuildContext context,
   Event event,
   String userId,
+  AuthService authService,
 ) {
   return showDialog<bool>(
     context: context,
-    builder: (context) => PurchaseTicketDialog(event: event, userId: userId),
+    builder: (context) => PurchaseTicketDialog(
+      event: event,
+      userId: userId,
+      authService: authService,
+    ),
   );
 }
