@@ -574,12 +574,53 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
   List<Widget> _buildScreens(AuthService authService) {
-    return [
+    final screens = [
       const DiscoverScreen(),
       const TicketsScreen(),
       const ChatScreen(),
-      DeveloperScreen(isDeveloper: authService.isDeveloper),
     ];
+
+    // Only add Developer screen if user is a developer
+    if (authService.isDeveloper) {
+      screens.add(DeveloperScreen(isDeveloper: authService.isDeveloper));
+    }
+
+    return screens;
+  }
+
+  List<NavigationDestination> _buildNavigationDestinations(
+    AuthService authService,
+  ) {
+    final destinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.explore_outlined, color: Colors.white70),
+        selectedIcon: Icon(Icons.explore, color: Color(0xFF00FF88)),
+        label: 'Discover',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.confirmation_number_outlined, color: Colors.white70),
+        selectedIcon: Icon(Icons.confirmation_number, color: Color(0xFF00FF88)),
+        label: 'Tickets',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.chat_bubble_outline, color: Colors.white70),
+        selectedIcon: Icon(Icons.chat_bubble, color: Color(0xFF00FF88)),
+        label: 'Chat',
+      ),
+    ];
+
+    // Only add Developer tab if user is a developer
+    if (authService.isDeveloper) {
+      destinations.add(
+        const NavigationDestination(
+          icon: Icon(Icons.speed_outlined, color: Colors.white70),
+          selectedIcon: Icon(Icons.speed, color: Color(0xFF00FF88)),
+          label: 'Developer',
+        ),
+      );
+    }
+
+    return destinations;
   }
 
   @override
@@ -600,42 +641,7 @@ class _MainScreenState extends State<MainScreen> {
           });
         },
         indicatorColor: const Color(0xFF00FF88).withValues(alpha: 0.2),
-        destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.explore_outlined, color: Colors.white70),
-            selectedIcon: Icon(Icons.explore, color: Color(0xFF00FF88)),
-            label: 'Discover',
-          ),
-          const NavigationDestination(
-            icon: Icon(
-              Icons.confirmation_number_outlined,
-              color: Colors.white70,
-            ),
-            selectedIcon: Icon(
-              Icons.confirmation_number,
-              color: Color(0xFF00FF88),
-            ),
-            label: 'Tickets',
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline, color: Colors.white70),
-            selectedIcon: Icon(Icons.chat_bubble, color: Color(0xFF00FF88)),
-            label: 'Chat',
-          ),
-          NavigationDestination(
-            icon: Icon(
-              authService.isDeveloper
-                  ? Icons.speed_outlined
-                  : Icons.speed_outlined,
-              color: Colors.white70,
-            ),
-            selectedIcon: Icon(
-              authService.isDeveloper ? Icons.speed : Icons.speed_outlined,
-              color: const Color(0xFF00FF88),
-            ),
-            label: 'Developer',
-          ),
-        ],
+        destinations: _buildNavigationDestinations(authService),
       ),
     );
   }
@@ -656,9 +662,34 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   String _searchQuery = '';
 
   @override
+  void initState() {
+    super.initState();
+    // Listen to auth service changes (for balance updates)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = _InheritedAuthProvider.of(context);
+      authService.addListener(_onAuthServiceChanged);
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    // Remove listener
+    try {
+      final authService = _InheritedAuthProvider.of(context);
+      authService.removeListener(_onAuthServiceChanged);
+    } catch (e) {
+      // Context might not be available
+    }
     super.dispose();
+  }
+
+  void _onAuthServiceChanged() {
+    if (mounted) {
+      setState(() {
+        // Rebuild to show updated balance
+      });
+    }
   }
 
   @override
@@ -825,6 +856,44 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          // Balance display
+          GestureDetector(
+            onTap: () => _showAddMoneyDialog(context, authService),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00FF88).withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF00FF88), width: 1),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.account_balance_wallet,
+                    color: Color(0xFF00FF88),
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '\$${authService.balance.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Color(0xFF00FF88),
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(
+                    Icons.add_circle_outline,
+                    color: Color(0xFF00FF88),
+                    size: 16,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.person_outline, color: Colors.white),
             onPressed: () {
@@ -1153,6 +1222,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           builder: (context) => EventDetailsScreen(
                             event: event,
                             userId: authService.user?.uid ?? '',
+                            authService: authService,
                           ),
                         ),
                       );
@@ -1182,6 +1252,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         context,
                         event,
                         authService.user?.uid ?? '',
+                        authService,
                       );
                     },
                     style: ElevatedButton.styleFrom(
@@ -1215,6 +1286,255 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAddMoneyDialog(BuildContext context, AuthService authService) {
+    showDialog(
+      context: context,
+      builder: (context) => AddMoneyDialog(authService: authService),
+    );
+  }
+}
+
+// Add Money Dialog
+class AddMoneyDialog extends StatefulWidget {
+  final AuthService authService;
+
+  const AddMoneyDialog({super.key, required this.authService});
+
+  @override
+  State<AddMoneyDialog> createState() => _AddMoneyDialogState();
+}
+
+class _AddMoneyDialogState extends State<AddMoneyDialog> {
+  double _selectedAmount = 50.0;
+  bool _isLoading = false;
+  final List<double> _quickAmounts = [10, 25, 50, 100, 200, 500];
+
+  Future<void> _addMoney() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      await widget.authService.addMoney(_selectedAmount);
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Successfully added \$${_selectedAmount.toStringAsFixed(2)} to your balance!',
+            ),
+            backgroundColor: const Color(0xFF00FF88),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: const Color(0xFF1A1F2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00FF88).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.account_balance_wallet,
+                    color: Color(0xFF00FF88),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Add Money',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white70),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Current balance
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF131722),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Current Balance:',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                  Text(
+                    '\$${widget.authService.balance.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Color(0xFF00FF88),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Quick amount selection
+            const Text(
+              'Select Amount',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _quickAmounts.map((amount) {
+                final isSelected = _selectedAmount == amount;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedAmount = amount;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? const Color(0xFF00FF88).withValues(alpha: 0.2)
+                          : const Color(0xFF131722),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? const Color(0xFF00FF88)
+                            : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                    child: Text(
+                      '\$${amount.toStringAsFixed(0)}',
+                      style: TextStyle(
+                        color: isSelected
+                            ? const Color(0xFF00FF88)
+                            : Colors.white70,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+            // New balance preview
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00FF88).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF00FF88).withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'New Balance:',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                  Text(
+                    '\$${(widget.authService.balance + _selectedAmount).toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      color: Color(0xFF00FF88),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Add money button
+            ElevatedButton(
+              onPressed: _isLoading ? null : _addMoney,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00FF88),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                disabledBackgroundColor: Colors.grey,
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                      ),
+                    )
+                  : Text(
+                      'Add \$${_selectedAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
