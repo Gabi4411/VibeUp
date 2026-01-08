@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:*", "https://vibeup-de0fc.web.app", "https://vibeup-de0fc.firebaseapp.com"],
+    "method": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+    "maxAgeSeconds": 3600,
+    "responseHeader": ["Content-Type", "Authorization", "Content-Length", "User-Agent", "x-goog-resumable"]
+  }
+]

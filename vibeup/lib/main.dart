@@ -12,6 +12,7 @@ import 'screens/event_details_screen.dart';
 import 'screens/event_analytics_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/chat_room_screen.dart';
+import 'screens/event_gallery_screen.dart';
 import 'widgets/purchase_ticket_dialog.dart';
 
 // Firebase Options Import
@@ -574,25 +575,18 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  List<Widget> _buildScreens(AuthService authService) {
-    final screens = [
-      const DiscoverScreen(),
-      const TicketsScreen(),
-      const ChatScreen(),
-    ];
-
-    // Only add Developer screen if user is a developer
-    if (authService.isDeveloper) {
-      screens.add(DeveloperScreen(isDeveloper: authService.isDeveloper));
-    }
-
-    return screens;
-  }
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const TicketsScreen(),
+    const ChatScreen(),
+    const MyEventsGalleryScreen(),
+    const ProfileScreen(),
+  ];
 
   List<NavigationDestination> _buildNavigationDestinations(
     AuthService authService,
   ) {
-    final destinations = [
+    return [
       const NavigationDestination(
         icon: Icon(Icons.explore_outlined, color: Colors.white70),
         selectedIcon: Icon(Icons.explore, color: Color(0xFF00FF88)),
@@ -608,20 +602,17 @@ class _MainScreenState extends State<MainScreen> {
         selectedIcon: Icon(Icons.chat_bubble, color: Color(0xFF00FF88)),
         label: 'Chat',
       ),
+      const NavigationDestination(
+        icon: Icon(Icons.photo_library_outlined, color: Colors.white70),
+        selectedIcon: Icon(Icons.photo_library, color: Color(0xFF00FF88)),
+        label: 'Gallery',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.person_outline, color: Colors.white70),
+        selectedIcon: Icon(Icons.person, color: Color(0xFF00FF88)),
+        label: 'Profile',
+      ),
     ];
-
-    // Only add Developer tab if user is a developer
-    if (authService.isDeveloper) {
-      destinations.add(
-        const NavigationDestination(
-          icon: Icon(Icons.speed_outlined, color: Colors.white70),
-          selectedIcon: Icon(Icons.speed, color: Color(0xFF00FF88)),
-          label: 'Developer',
-        ),
-      );
-    }
-
-    return destinations;
   }
 
   @override
@@ -631,7 +622,7 @@ class _MainScreenState extends State<MainScreen> {
     return Scaffold(
       body: IndexedStack(
         index: _selectedIndex,
-        children: _buildScreens(authService),
+        children: _screens,
       ),
       bottomNavigationBar: NavigationBar(
         backgroundColor: const Color(0xFF1A1F2E),
@@ -2676,8 +2667,9 @@ class _DeveloperScreenState extends State<DeveloperScreen> {
                             Text(
                               'No events created yet',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.5),
-                                fontSize: 16,
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -3159,6 +3151,344 @@ class _DeveloperScreenState extends State<DeveloperScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// Home Screen - wraps DiscoverScreen
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const DiscoverScreen();
+  }
+}
+
+// Profile Screen
+class ProfileScreen extends StatelessWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = _InheritedAuthProvider.of(context);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF1A1F2E),
+      ),
+      body: SafeArea(
+        child: authService.isDeveloper 
+          ? const DeveloperScreen(isDeveloper: true)
+          : Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.person_outline,
+                      size: 80,
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'User Profile',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      authService.userEmail ?? '',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SettingsScreen(authService: authService),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.settings),
+                      label: const Text('Settings'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF00FF88),
+                        side: const BorderSide(color: Color(0xFF00FF88)),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+      ),
+    );
+  }
+}
+
+// My Events Gallery Screen - shows user's attended events
+class MyEventsGalleryScreen extends StatefulWidget {
+  const MyEventsGalleryScreen({super.key});
+
+  @override
+  State<MyEventsGalleryScreen> createState() => _MyEventsGalleryScreenState();
+}
+
+class _MyEventsGalleryScreenState extends State<MyEventsGalleryScreen> {
+  final TicketService _ticketService = TicketService();
+  final EventService _eventService = EventService();
+
+  @override
+  Widget build(BuildContext context) {
+    final authService = _InheritedAuthProvider.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Events Gallery', style: TextStyle(color: Colors.white)),
+        backgroundColor: const Color(0xFF1A1F2E),
+      ),
+      body: SafeArea(
+        child: StreamBuilder<List<Ticket>>(
+          stream: _ticketService.getUserTickets(authService.user?.uid ?? ''),
+          builder: (context, ticketSnapshot) {
+            if (ticketSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(color: Color(0xFF00FF88)),
+              );
+            }
+
+            if (ticketSnapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading events',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final tickets = ticketSnapshot.data ?? [];
+
+            if (tickets.isEmpty) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.photo_library_outlined,
+                        size: 80,
+                        color: Colors.white.withValues(alpha: 0.3),
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'No event photos yet',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Purchase tickets to events to view and share photos',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            final eventIds = tickets.map((t) => t.eventId).toSet().toList();
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: eventIds.length,
+              itemBuilder: (context, index) {
+                return _buildEventGalleryCard(
+                  context,
+                  eventIds[index],
+                  authService,
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventGalleryCard(
+    BuildContext context,
+    String eventId,
+    AuthService authService,
+  ) {
+    return FutureBuilder<Event?>(
+      future: _eventService.getEventById(eventId),
+      builder: (context, eventSnapshot) {
+        if (eventSnapshot.connectionState == ConnectionState.waiting) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            height: 100,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1F2E),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: CircularProgressIndicator(
+                color: Color(0xFF00FF88),
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        }
+
+        if (!eventSnapshot.hasData) {
+          return const SizedBox.shrink();
+        }
+
+        final event = eventSnapshot.data!;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1F2E),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () {
+                // Check if user is organizer
+                final isOrganizer = event.creatorId == authService.user?.uid;
+                
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EventGalleryScreen(
+                      event: event,
+                      userId: authService.user?.uid ?? '',
+                      userName: authService.userEmail?.split('@')[0] ?? 'User',
+                      isOrganizer: isOrganizer,
+                    ),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Event icon/avatar
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00FF88).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.photo_library,
+                        color: Color(0xFF00FF88),
+                        size: 32,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            event.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  event.location,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${event.formattedDate} ${event.formattedDay}',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white54,
+                      size: 24,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

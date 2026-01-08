@@ -41,48 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAZDpZiaCK2XLsxbLbsyu-IJ4InM9Ti0hA',
-    appId: '1:177945112143:web:765f06fa1880463414043a',
-    messagingSenderId: '177945112143',
-    projectId: 'vibeup-636a2',
-    authDomain: 'vibeup-636a2.firebaseapp.com',
-    storageBucket: 'vibeup-636a2.firebasestorage.app',
-    measurementId: 'G-VML898VF2Z',
+    apiKey: 'AIzaSyDLxblQI4HMEFMFDJ4l9MhA_K7qRPGlPWA',
+    appId: '1:615139315784:web:2c9fc1ccd2eae35a77087d',
+    messagingSenderId: '615139315784',
+    projectId: 'vibeup-de0fc',
+    authDomain: 'vibeup-de0fc.firebaseapp.com',
+    storageBucket: 'vibeup-de0fc.firebasestorage.app',
+    measurementId: 'G-T6SSQWJWZV',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAqYV5gJfXSmr7JhknNIMSN9bBPY3I49Cc',
-    appId: '1:177945112143:android:5acbc06d7c1c5f2814043a',
-    messagingSenderId: '177945112143',
-    projectId: 'vibeup-636a2',
-    storageBucket: 'vibeup-636a2.firebasestorage.app',
+    apiKey: 'AIzaSyB6UDxpHUTWGo-klBJmmLPnZ9LvqSb3jBM',
+    appId: '1:615139315784:android:b2912d6b20759dce77087d',
+    messagingSenderId: '615139315784',
+    projectId: 'vibeup-de0fc',
+    storageBucket: 'vibeup-de0fc.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyA-K3wDPMMMkVE1FQFx03UmChn_3MvuL8s',
-    appId: '1:177945112143:ios:02d2848434f26b1614043a',
-    messagingSenderId: '177945112143',
-    projectId: 'vibeup-636a2',
-    storageBucket: 'vibeup-636a2.firebasestorage.app',
+    apiKey: 'AIzaSyA7Wpd06cmaKCx5u0BeSCIr6pYdbBLnvg0',
+    appId: '1:615139315784:ios:aff6ccec942e963477087d',
+    messagingSenderId: '615139315784',
+    projectId: 'vibeup-de0fc',
+    storageBucket: 'vibeup-de0fc.firebasestorage.app',
     iosBundleId: 'com.example.vibeup',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyA-K3wDPMMMkVE1FQFx03UmChn_3MvuL8s',
-    appId: '1:177945112143:ios:02d2848434f26b1614043a',
-    messagingSenderId: '177945112143',
-    projectId: 'vibeup-636a2',
-    storageBucket: 'vibeup-636a2.firebasestorage.app',
+    apiKey: 'AIzaSyA7Wpd06cmaKCx5u0BeSCIr6pYdbBLnvg0',
+    appId: '1:615139315784:ios:aff6ccec942e963477087d',
+    messagingSenderId: '615139315784',
+    projectId: 'vibeup-de0fc',
+    storageBucket: 'vibeup-de0fc.firebasestorage.app',
     iosBundleId: 'com.example.vibeup',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAZDpZiaCK2XLsxbLbsyu-IJ4InM9Ti0hA',
-    appId: '1:177945112143:web:96f376e3d55c078514043a',
-    messagingSenderId: '177945112143',
-    projectId: 'vibeup-636a2',
-    authDomain: 'vibeup-636a2.firebaseapp.com',
-    storageBucket: 'vibeup-636a2.firebasestorage.app',
-    measurementId: 'G-5NGC1ZGK0W',
+    apiKey: 'AIzaSyDLxblQI4HMEFMFDJ4l9MhA_K7qRPGlPWA',
+    appId: '1:615139315784:web:dbf8c57cee07a05877087d',
+    messagingSenderId: '615139315784',
+    projectId: 'vibeup-de0fc',
+    authDomain: 'vibeup-de0fc.firebaseapp.com',
+    storageBucket: 'vibeup-de0fc.firebasestorage.app',
+    measurementId: 'G-GKL7HGY44K',
   );
+
 }

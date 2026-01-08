@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "177945112143",
-    "project_id": "vibeup-636a2",
-    "storage_bucket": "vibeup-636a2.firebasestorage.app"
+    "project_number": "615139315784",
+    "project_id": "vibeup-de0fc",
+    "storage_bucket": "vibeup-de0fc.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:177945112143:android:5acbc06d7c1c5f2814043a",
+        "mobilesdk_app_id": "1:615139315784:android:b2912d6b20759dce77087d",
         "android_client_info": {
           "package_name": "com.example.vibeup"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAqYV5gJfXSmr7JhknNIMSN9bBPY3I49Cc"
+          "current_key": "AIzaSyB6UDxpHUTWGo-klBJmmLPnZ9LvqSb3jBM"
         }
       ],
       "services": {

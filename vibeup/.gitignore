@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+vibeup/firebase.json
+vibeup/android/app/google-services.json
+vibeup/lib/firebase_options.dart
+vibeup/windows/flutter/generated_plugin_registrant.cc
+
