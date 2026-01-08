@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/event_model.dart';
 import '../services/event_service.dart';
+import 'table_management_screen.dart';
+import 'menu_management_screen.dart';
 
 class CreateEventScreen extends StatefulWidget {
   final String userId;
@@ -37,11 +39,14 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
   List<String> _selectedTags = [];
   bool _isPublic = true;
   bool _isLoading = false;
+  bool _hasTableBooking = false;
+  bool _hasMenu = false;
 
   // Available categories
   final List<String> _categories = [
     'Music',
     'Nightlife',
+    'Clubs',
     'Arts',
     'Sports',
     'Food',
@@ -90,6 +95,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       _selectedCategory = widget.existingEvent!.category;
       _selectedTags = List.from(widget.existingEvent!.tags);
       _isPublic = widget.existingEvent!.isPublic;
+      _hasTableBooking = widget.existingEvent!.hasTableBooking;
+      _hasMenu = widget.existingEvent!.hasMenu;
       // Parse time from existing event
       final timeParts = widget.existingEvent!.time.split(':');
       if (timeParts.length == 2) {
@@ -229,6 +236,8 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         attendanceCount: widget.existingEvent?.attendanceCount ?? 0,
         createdAt: widget.existingEvent?.createdAt ?? DateTime.now(),
         updatedAt: widget.existingEvent != null ? DateTime.now() : null,
+        hasTableBooking: _hasTableBooking,
+        hasMenu: _hasMenu,
       );
 
       if (widget.existingEvent != null) {
@@ -244,7 +253,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         }
       } else {
         // Create new event
-        await _eventService.createEvent(event);
+        final eventId = await _eventService.createEvent(event);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -252,6 +261,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
               backgroundColor: Color(0xFF00FF88),
             ),
           );
+
+          // Show setup options if table booking or menu is enabled
+          if (_hasTableBooking || _hasMenu) {
+            final eventWithId = event.copyWith(id: eventId);
+            _showSetupDialog(eventWithId);
+            return; // Don't pop navigator yet
+          }
         }
       }
 
@@ -275,6 +291,94 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         });
       }
     }
+  }
+
+  void _showSetupDialog(Event event) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1F2E),
+        title: const Text(
+          'Setup Event Features',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your event has been created! Would you like to set up the features now?',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 16),
+            if (_hasTableBooking)
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TableManagementScreen(event: event),
+                    ),
+                  ).then((_) {
+                    if (_hasMenu) {
+                      // If menu is also enabled, show that screen next
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => MenuManagementScreen(event: event),
+                        ),
+                      ).then((_) => Navigator.pop(context, true));
+                    } else {
+                      Navigator.pop(context, true);
+                    }
+                  });
+                },
+                icon: const Icon(Icons.table_bar),
+                label: const Text('Set Up Tables'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF00FF88),
+                  side: const BorderSide(color: Color(0xFF00FF88)),
+                ),
+              ),
+            if (_hasMenu)
+              Padding(
+                padding: EdgeInsets.only(top: _hasTableBooking ? 8 : 0),
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context); // Close dialog
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MenuManagementScreen(event: event),
+                      ),
+                    ).then((_) => Navigator.pop(context, true));
+                  },
+                  icon: const Icon(Icons.restaurant_menu),
+                  label: const Text('Set Up Menu'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF00FF88),
+                    side: const BorderSide(color: Color(0xFF00FF88)),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context, true); // Close create event screen
+            },
+            child: const Text(
+              'Skip for Now',
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -665,8 +769,102 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
                       ),
                     ],
                   ),
+                ),                const SizedBox(height: 16),
+
+                // Table Booking Toggle
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1F2E),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.table_bar, color: Colors.white70),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Enable Table Booking',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Allow VIP table bookings for this event',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _hasTableBooking,
+                        onChanged: (value) {
+                          setState(() {
+                            _hasTableBooking = value;
+                          });
+                        },
+                        activeThumbColor: const Color(0xFF00FF88),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+
+                // Menu Ordering Toggle
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1F2E),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.restaurant_menu, color: Colors.white70),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Enable Menu Ordering',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Allow table ordering from menu',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _hasMenu,
+                        onChanged: (value) {
+                          setState(() {
+                            _hasMenu = value;
+                          });
+                        },
+                        activeThumbColor: const Color(0xFF00FF88),
+                      ),
+                    ],
+                  ),
+                ),                const SizedBox(height: 24),
 
                 // Save Button
                 SizedBox(

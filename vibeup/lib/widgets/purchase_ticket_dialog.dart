@@ -97,7 +97,6 @@ class _PurchaseTicketDialogState extends State<PurchaseTicketDialog> {
       );
 
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate success
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -109,6 +108,7 @@ class _PurchaseTicketDialogState extends State<PurchaseTicketDialog> {
             duration: const Duration(seconds: 3),
           ),
         );
+        Navigator.pop(context, true); // Return true to indicate success
       }
     } catch (e) {
       if (mounted) {

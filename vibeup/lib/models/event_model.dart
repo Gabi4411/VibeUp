@@ -17,6 +17,8 @@ class Event {
   final int attendanceCount;
   final DateTime createdAt;
   final DateTime? updatedAt;
+  final bool hasTableBooking;
+  final bool hasMenu;
 
   Event({
     required this.id,
@@ -35,6 +37,8 @@ class Event {
     this.attendanceCount = 0,
     required this.createdAt,
     this.updatedAt,
+    this.hasTableBooking = false,
+    this.hasMenu = false,
   });
 
   // Convert Event to Map for Firestore
@@ -56,6 +60,8 @@ class Event {
       'attendanceCount': attendanceCount,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'hasTableBooking': hasTableBooking,
+      'hasMenu': hasMenu,
     };
   }
 
@@ -81,6 +87,8 @@ class Event {
       updatedAt: data['updatedAt'] != null
           ? (data['updatedAt'] as Timestamp).toDate()
           : null,
+      hasTableBooking: data['hasTableBooking'] ?? false,
+      hasMenu: data['hasMenu'] ?? false,
     );
   }
 
@@ -102,6 +110,8 @@ class Event {
     int? attendanceCount,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? hasTableBooking,
+    bool? hasMenu,
   }) {
     return Event(
       id: id ?? this.id,
@@ -120,6 +130,8 @@ class Event {
       attendanceCount: attendanceCount ?? this.attendanceCount,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      hasTableBooking: hasTableBooking ?? this.hasTableBooking,
+      hasMenu: hasMenu ?? this.hasMenu,
     );
   }
 
